@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model DailyOhahasa {
+  id        String   @id @default(cuid())
+  date      String   @unique
+  payload   String
+  createdAt DateTime @default(now())
+}
+
+model SharedResult {
+  id        String   @id @default(cuid())
+  type      String
+  payload   String
+  createdAt DateTime @default(now())
+}

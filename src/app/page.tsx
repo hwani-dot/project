@@ -1,65 +1,77 @@
-import Image from "next/image";
+import Link from "next/link";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Sparkles, WalletCards, Star } from "lucide-react";
 
-export default function Home() {
+export default function LandingPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen flex flex-col">
+      <header className="p-6 text-center">
+        <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-violet-600 to-fuchsia-500 bg-clip-text text-transparent">
+          오늘의 운세
+        </h1>
+        <p className="text-muted-foreground mt-2 text-sm">
+          오늘의 운세, 타로, 오하아사(별자리 순위)를 한 번에
+        </p>
+      </header>
+
+      <section className="flex-1 container max-w-2xl mx-auto px-4 pb-8">
+        <div className="grid gap-4 md:grid-cols-3">
+          <Link href="/start?service=today">
+            <Card className="h-full hover:border-violet-300 hover:shadow-md transition-all cursor-pointer">
+              <CardHeader>
+                <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center mb-2">
+                  <Sparkles className="w-6 h-6 text-violet-600" />
+                </div>
+                <CardTitle className="text-lg">오늘의 운세</CardTitle>
+                <CardDescription>생년월일 기반 개인화 운세</CardDescription>
+              </CardHeader>
+            </Card>
+          </Link>
+
+          <Link href="/start?service=tarot">
+            <Card className="h-full hover:border-violet-300 hover:shadow-md transition-all cursor-pointer">
+              <CardHeader>
+                <div className="w-12 h-12 rounded-xl bg-fuchsia-100 flex items-center justify-center mb-2">
+                  <WalletCards className="w-6 h-6 text-fuchsia-600" />
+                </div>
+                <CardTitle className="text-lg">타로</CardTitle>
+                <CardDescription>1장 또는 3장 스프레드</CardDescription>
+              </CardHeader>
+            </Card>
+          </Link>
+
+          <Link href="/start?service=ohahasa">
+            <Card className="h-full hover:border-violet-300 hover:shadow-md transition-all cursor-pointer">
+              <CardHeader>
+                <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center mb-2">
+                  <Star className="w-6 h-6 text-amber-600" />
+                </div>
+                <CardTitle className="text-lg">오하아사</CardTitle>
+                <CardDescription>12별자리 운세 순위</CardDescription>
+              </CardHeader>
+            </Card>
+          </Link>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div className="mt-8 text-center">
+          <Link href="/start">
+            <Button size="lg" className="w-full max-w-sm">
+              바로 시작하기
+            </Button>
+          </Link>
         </div>
-      </main>
-    </div>
+
+        <div className="mt-8">
+          <Link href="/history" className="text-sm text-muted-foreground hover:underline">
+            최근 결과 보기
+          </Link>
+        </div>
+      </section>
+
+      <footer className="p-4 text-center text-xs text-muted-foreground">
+        본 서비스는 오락/참고용이며, 과학적 근거가 없습니다.
+      </footer>
+    </main>
   );
 }
