@@ -2,8 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 import type { UserProfile } from "@/types/fortune";
-
-const PROFILE_KEY = "fortune-profile";
+import { FORTUNE_PROFILE_KEY } from "@/lib/profile";
 
 interface ProfileContextValue {
   profile: UserProfile | null;
@@ -19,7 +18,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const loadProfile = useCallback(() => {
     if (typeof window === "undefined") return;
     try {
-      const raw = localStorage.getItem(PROFILE_KEY);
+      const raw = localStorage.getItem(FORTUNE_PROFILE_KEY);
       if (raw) {
         const p = JSON.parse(raw) as UserProfile;
         setProfileState(p);
@@ -34,8 +33,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const setProfile = useCallback((p: UserProfile | null) => {
     setProfileState(p);
     if (typeof window !== "undefined") {
-      if (p) localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
-      else localStorage.removeItem(PROFILE_KEY);
+      if (p) localStorage.setItem(FORTUNE_PROFILE_KEY, JSON.stringify(p));
+      else localStorage.removeItem(FORTUNE_PROFILE_KEY);
     }
   }, []);
 

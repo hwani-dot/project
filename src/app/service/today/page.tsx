@@ -9,31 +9,35 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Share2 } from "lucide-react";
 import { addToHistory } from "@/lib/history";
 import { Disclaimer } from "@/components/fortune/Disclaimer";
+import { ProfileGate } from "@/components/fortune/ProfileGate";
+import { getStoredProfile, getBirthParts } from "@/lib/profile";
 import type { TodayFortuneResponse } from "@/types/fortune";
 
-export default function TodayPage() {
+function TodayPageContent() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<TodayFortuneResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
-      let profile: { nickname?: string; birthYear?: number; birthMonth?: number; birthDay?: number; interests?: string[] } = {};
-      try {
-        const raw = localStorage.getItem("fortune-profile");
-        if (raw) profile = JSON.parse(raw);
-      } catch {}
+      const stored = getStoredProfile() as Record<string, unknown> | null;
+      const profile = stored ?? {};
+      const { year, month, day } = getBirthParts(profile);
+
+      const payload: Record<string, unknown> = {
+        nickname: (profile.name as string) ?? (profile.nickname as string) ?? "방문자",
+        birthYear: year,
+        birthMonth: month,
+        birthDay: day,
+        interests: profile.interests ?? [],
+      };
+      if (profile.birth) payload.birth = profile.birth;
+      if (profile.birthTime) payload.birthTime = profile.birthTime;
 
       const res = await fetch("/api/fortune/today", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nickname: profile.nickname ?? "방문자",
-          birthYear: profile.birthYear ?? 2000,
-          birthMonth: profile.birthMonth ?? 1,
-          birthDay: profile.birthDay ?? 1,
-          interests: profile.interests ?? [],
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -93,7 +97,7 @@ export default function TodayPage() {
         <Card>
           <CardContent className="pt-6">
             <p className="text-destructive">{error}</p>
-            <Link href="/start?service=today">
+            <Link href="/start?next=/service/today">
               <Button size="sm" className="mt-4">
                 다시 시도
               </Button>
@@ -191,5 +195,13 @@ export default function TodayPage() {
       </div>
       <Disclaimer />
     </main>
+  );
+}
+
+export default function TodayPage() {
+  return (
+    <ProfileGate>
+      <TodayPageContent />
+    </ProfileGate>
   );
 }

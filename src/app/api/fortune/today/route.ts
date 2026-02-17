@@ -43,8 +43,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { nickname, birthYear, birthMonth, birthDay, interests } = body;
-    const seed = `${new Date().toISOString().slice(0, 10)}-${nickname}-${birthYear}-${birthMonth}-${birthDay}`;
+    const { nickname, birth, birthTime, birthYear, birthMonth, birthDay, interests } = body;
+    let y: number, m: number, d: number;
+    if (birth && /^\d{4}-\d{2}-\d{2}$/.test(birth)) {
+      [y, m, d] = birth.split("-").map(Number);
+    } else if (birthYear != null && birthMonth != null && birthDay != null) {
+      y = Number(birthYear);
+      m = Number(birthMonth);
+      d = Number(birthDay);
+    } else {
+      return NextResponse.json({ error: "생년월일이 필요합니다." }, { status: 400 });
+    }
+    const seed = `${new Date().toISOString().slice(0, 10)}-${nickname}-${y}-${m}-${d}`;
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -53,10 +63,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const birthLine = birthTime ? `${y}년 ${m}월 ${d}일 ${birthTime}` : `${y}년 ${m}월 ${d}일`;
     const prompt = `당신은 운세 전문가입니다. 아래 정보를 바탕으로 오늘의 개인화된 운세를 JSON 형식으로 작성해 주세요.
 
 사용자: ${nickname}
-생년월일: ${birthYear}년 ${birthMonth}월 ${birthDay}일
+생년월일: ${birthLine}
 관심사: ${(interests ?? []).join(", ") || "전반"}
 
 반드시 아래 JSON 구조만 반환하고, 다른 설명은 붙이지 마세요:

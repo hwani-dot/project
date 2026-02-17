@@ -53,11 +53,23 @@ export interface OhahasaResponse {
 }
 
 export interface UserProfile {
+  /** 이름 (저장 키는 name 또는 nickname 호환) */
   nickname: string;
+  name?: string;
+  /** 본인/가족/친구/연인/기타 */
+  relation?: string;
   gender?: string;
-  birthYear: number;
-  birthMonth: number;
-  birthDay: number;
+  /** YYYY-MM-DD */
+  birth?: string;
+  /** HH:mm. 시간 모를 때는 비우고 timeUnknown: true */
+  birthTime?: string;
+  /** 태어난 시간 모름 여부 */
+  timeUnknown?: boolean;
+  /** 양력/음력 */
+  calendarType?: "solar" | "lunar";
+  birthYear?: number;
+  birthMonth?: number;
+  birthDay?: number;
   birthHour?: number;
   birthMinute?: number;
   interests?: string[];

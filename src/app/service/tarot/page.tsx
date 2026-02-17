@@ -9,9 +9,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Share2 } from "lucide-react";
 import { addToHistory } from "@/lib/history";
 import { Disclaimer } from "@/components/fortune/Disclaimer";
+import { ProfileGate } from "@/components/fortune/ProfileGate";
 import type { TarotResponse } from "@/types/fortune";
 
-export default function TarotPage() {
+function TarotPageContent() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<TarotResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +78,7 @@ export default function TarotPage() {
         <Card>
           <CardContent className="pt-6">
             <p className="text-destructive">{error}</p>
-            <Link href="/start?service=tarot">
+            <Link href="/start?next=/service/tarot">
               <Button size="sm" className="mt-4">
                 다시 시도
               </Button>
@@ -136,7 +137,7 @@ export default function TarotPage() {
       </Card>
 
       <div className="mt-4 flex gap-2">
-        <Link href="/start?service=tarot" className="flex-1">
+        <Link href="/start?next=/service/tarot" className="flex-1">
           <Button variant="outline" className="w-full">
             다시 뽑기
           </Button>
@@ -149,5 +150,13 @@ export default function TarotPage() {
       </div>
       <Disclaimer />
     </main>
+  );
+}
+
+export default function TarotPage() {
+  return (
+    <ProfileGate>
+      <TarotPageContent />
+    </ProfileGate>
   );
 }

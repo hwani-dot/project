@@ -26,6 +26,8 @@ import { cn } from "@/lib/utils";
 import { getZodiacFromBirthday } from "@/lib/zodiac";
 import { addToHistory } from "@/lib/history";
 import { Disclaimer } from "@/components/fortune/Disclaimer";
+import { ProfileGate } from "@/components/fortune/ProfileGate";
+import { getStoredProfile, getBirthParts } from "@/lib/profile";
 import type { OhahasaResponse, OhahasaRankItem } from "@/types/fortune";
 
 function OhahasaContent() {
@@ -42,27 +44,18 @@ function OhahasaContent() {
   const [data, setData] = useState<OhahasaResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [detailSign, setDetailSign] = useState<OhahasaRankItem | null>(null);
-  const [profile, setProfile] = useState<{
-    birthYear?: number;
-    birthMonth?: number;
-    birthDay?: number;
-  } | null>(null);
+  const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("fortune-profile");
-      if (raw) setProfile(JSON.parse(raw));
-    } catch {}
+    const stored = getStoredProfile() as Record<string, unknown> | null;
+    if (stored) setProfile(stored);
   }, []);
 
+  const birthParts = getBirthParts(profile);
   const mySign = profile
-    ? getZodiacFromBirthday(
-        profile.birthYear ?? 2000,
-        profile.birthMonth ?? 1,
-        profile.birthDay ?? 1
-      )
+    ? getZodiacFromBirthday(birthParts.year, birthParts.month, birthParts.day)
     : null;
 
   useEffect(() => {
@@ -333,19 +326,21 @@ function OhahasaContent() {
 
 export default function OhahasaPage() {
   return (
-    <Suspense fallback={
-      <main className="min-h-screen container max-w-2xl mx-auto px-4 py-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-muted rounded w-48" />
-          <div className="grid grid-cols-3 gap-2">
-            {[...Array(12)].map((_, i) => (
-              <div key={i} className="h-24 bg-muted rounded" />
-            ))}
+    <ProfileGate>
+      <Suspense fallback={
+        <main className="min-h-screen container max-w-2xl mx-auto px-4 py-8">
+          <div className="animate-pulse space-y-4">
+            <div className="h-8 bg-muted rounded w-48" />
+            <div className="grid grid-cols-3 gap-2">
+              {[...Array(12)].map((_, i) => (
+                <div key={i} className="h-24 bg-muted rounded" />
+              ))}
+            </div>
           </div>
-        </div>
-      </main>
-    }>
-      <OhahasaContent />
-    </Suspense>
+        </main>
+      }>
+        <OhahasaContent />
+      </Suspense>
+    </ProfileGate>
   );
 }
