@@ -3,6 +3,8 @@
  */
 
 export const FORTUNE_PROFILE_KEY = "fortune_profile";
+export const FORTUNE_PROFILE_AVATAR_KEY = "fortune_profile_avatar";
+export const FORTUNE_LEADER_AVATAR_KEY = "fortune_leader_avatar";
 
 const LEGACY_PROFILE_KEY = "fortune-profile";
 
@@ -29,6 +31,68 @@ export function hasStoredProfile(): boolean {
   if (p === null || typeof p !== "object") return false;
   if ("birth" in p && typeof (p as { birth?: string }).birth === "string") return true;
   return "birthYear" in p && "birthMonth" in p && "birthDay" in p;
+}
+
+/** 프로필 초기화 (로그아웃) - fortune_profile + fortune_profile_avatar 삭제 */
+export function clearProfile(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(FORTUNE_PROFILE_KEY);
+    localStorage.removeItem(FORTUNE_PROFILE_AVATAR_KEY);
+    localStorage.removeItem(LEGACY_PROFILE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 리더 아바타 이미지 URL (base64) - public/leader.jpg 없을 때 업로드한 이미지 */
+export function getLeaderAvatarUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(FORTUNE_LEADER_AVATAR_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** 리더 아바타 이미지 저장 */
+export function setLeaderAvatarUrl(dataUrl: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(FORTUNE_LEADER_AVATAR_KEY, dataUrl);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 리더 아바타 이미지 삭제 */
+export function clearLeaderAvatar(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(FORTUNE_LEADER_AVATAR_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 아바타 이미지 URL 가져오기 (base64 data URL) */
+export function getAvatarUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(FORTUNE_PROFILE_AVATAR_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** 아바타 이미지 저장 (base64 data URL) */
+export function setAvatarUrl(dataUrl: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(FORTUNE_PROFILE_AVATAR_KEY, dataUrl);
+  } catch {
+    /* ignore */
+  }
 }
 
 /** 프로필에서 birth(YYYY-MM-DD) 또는 birthYear/Month/Day → { year, month, day } 반환 */

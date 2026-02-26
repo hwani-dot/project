@@ -1,6 +1,10 @@
 /**
  * 12별자리 정의 - 한국어, 슬러그, 날짜 범위
  * 오하아사 및 생일→별자리 매핑에 사용
+ *
+ * 별자리 아이콘 매핑(sign → Lucide icon): @/lib/zodiac-icons (getZodiacIcon)
+ * 12궁 1:1 매핑 - 양(Flame), 황소(Leaf), 쌍둥이(Users), 게(Droplets), 사자(Sun),
+ * 처녀(Flower2), 천칭(Scale), 전갈(Bug), 사수(Target), 염소(Mountain), 물병(Waves), 물고기(Fish)
  */
 
 export type ZodiacSlug =
