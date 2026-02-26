@@ -2,12 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import tarotData from "@/data/tarot.json";
 import { seededShuffle, hashString } from "@/lib/seed";
+import { isDemoMode, logDemoModeOnce } from "@/lib/demo";
 import type { TarotResult, TarotCardResult, TarotSpread } from "@/types/fortune";
 
 type TarotCard = (typeof tarotData)[number];
 
 const RATE_LIMIT = 10;
 const rateMap = new Map<string, { count: number; resetAt: number }>();
+
+function hasOpenAIKey() {
+  const k = process.env.OPENAI_API_KEY;
+  return !!k && k.trim().length > 0;
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
+  ]);
+}
 
 function getClientId(req: NextRequest): string {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
@@ -92,22 +105,20 @@ function buildFallback(
   const a = hashString(date + "advice") % advices.length;
   const advice = advices[a] ?? advices[0]!;
 
-  const cautions = [
-    "성급한 결정은 피하세요.",
-    "과한 기대는 부담이 될 수 있습니다.",
-    "오늘은 무리하지 않는 것이 좋습니다.",
-  ];
+  const cautions = ["성급한 결정은 피하세요.", "과한 기대는 부담이 될 수 있습니다.", "오늘은 무리하지 않는 것이 좋습니다."];
   const c = hashString(date + "caution") % cautions.length;
   const caution = cautions[c];
 
   const cards: TarotCardResult[] = picked.map(({ card, position }) => {
-    const meaning = (card as { upright?: string }).upright;
-    const kw = (card as TarotCard).keywords ?? [];
+    const c = card as TarotCard;
+    const meaning = (c as { upright?: string }).upright;
+    const kw = c.keywords ?? [];
     const keywords = Array.isArray(kw) ? kw.slice(0, 3).map(String) : ["참고", "성찰", "균형"];
-    const interpretation = `${(card as TarotCard).krName} - ${meaning}. 이 카드는 ${keywords.join(", ")}의 에너지를 담고 있습니다.`;
+    const interpretation = `${c.krName} (${c.name}) - ${meaning}. 이 카드는 ${keywords.join(", ")}의 에너지를 담고 있습니다.`;
+    const displayName = `${c.krName ?? c.name} (${c.name})`;
     return {
-      id: (card as TarotCard).id ?? (card as TarotCard).name,
-      name: (card as TarotCard).krName ?? (card as TarotCard).name,
+      id: c.id ?? c.name,
+      name: displayName,
       isReversed: false,
       position,
       keywords,
@@ -130,31 +141,43 @@ function buildFallback(
 export async function POST(req: NextRequest) {
   const clientId = getClientId(req);
   if (!checkRateLimit(clientId)) {
-    return NextResponse.json(
-      { error: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." },
-      { status: 429 }
-    );
+    return NextResponse.json({ error: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." }, { status: 429 });
+  }
+
+  let body: Record<string, unknown> = {};
+  try {
+    body = (await req.json()) as Record<string, unknown>;
+  } catch {
+    /* ignore */
   }
 
   try {
-    const body = (await req.json()) as Record<string, unknown>;
     const spread = (body.spread as TarotSpread) ?? "single";
     const question = (body.question as string)?.trim() || undefined;
     const rerollCount = Number(body.rerollCount) || 0;
-    const profileSnapshot = body.profileSnapshot as { birth?: string; name?: string; interests?: string[] } | undefined;
+    const profileSnapshot =
+      body.profileSnapshot as { birth?: string; name?: string; interests?: string[] } | undefined;
     const profile = profileSnapshot ?? { birth: "", name: "" };
 
     const date = new Date().toISOString().slice(0, 10);
     const seed = buildSeed(date, profile, spread, question ?? "", rerollCount);
     const picked = pickCards(spread, seed);
 
-    if (process.env.OPENAI_API_KEY) {
+    // ✅ 1) 키 없으면 즉시 fallback (OpenAI로 절대 내려가지 않기)
+    if (!hasOpenAIKey()) {
+      logDemoModeOnce();
+      const fallback = buildFallback(date, spread, question, picked);
+      incrementRate(clientId);
+      return NextResponse.json({ ...fallback, meta: { demo: true, reason: "no_openai_key" } });
+    }
+
+    if (!isDemoMode()) {
       try {
         const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
         const cardsDesc = picked
           .map(
-            (p, i) =>
-              `${i + 1}. ${p.card.krName}(${p.card.name}) - 정방향${p.position ? ` [${p.position}]` : ""}`
+            (p, i) => `${i + 1}. ${p.card.krName}(${p.card.name}) - 정방향${p.position ? ` [${p.position}]` : ""}`
           )
           .join("\n");
 
@@ -169,7 +192,7 @@ ${cardsDesc}
 
 반드시 아래 JSON만 반환:
 {
-  "headline": "한 줄 요약 (예: 지금은 속도를 늦추는 게 이득입니다.)",
+  "headline": "한 줄 요약",
   "summary": "전체 요약 3~6문장 문단",
   "advice": "오늘의 추천 행동 1문장",
   "caution": "주의 1문장 (선택)",
@@ -177,7 +200,7 @@ ${cardsDesc}
     {
       "id": "카드id",
       "name": "한국어 카드명",
-      "isReversed": false (항상 정방향),
+      "isReversed": false,
       "position": "past|present|future (3장일 때만)",
       "keywords": ["키워드1","키워드2","키워드3"],
       "interpretation": "2~5문장 해석"
@@ -185,23 +208,32 @@ ${cardsDesc}
   ]
 }`;
 
-        const completion = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [{ role: "user", content: prompt }],
-          response_format: { type: "json_object" },
-        });
+        // ✅ 2) OpenAI 호출 타임아웃 (9초)
+        const completion = await withTimeout(
+          openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
+          }),
+          9000
+        );
 
         const content = completion.choices[0]?.message?.content;
         if (content) {
           const parsed = JSON.parse(content) as Partial<TarotResult>;
-          const cards: TarotCardResult[] = (parsed.cards ?? []).map((c, i) => ({
-            id: String(c.id ?? picked[i]!.card.id ?? picked[i]!.card.name),
-            name: String(c.name ?? picked[i]!.card.krName),
-            isReversed: false,
-            position: c.position ?? picked[i]!.position,
-            keywords: Array.isArray(c.keywords) ? c.keywords.slice(0, 3).map(String) : [],
-            interpretation: String(c.interpretation ?? ""),
-          }));
+
+          const cards: TarotCardResult[] = (parsed.cards ?? []).map((c, i) => {
+            const card = picked[i]!.card;
+            const displayName = `${card.krName ?? card.name} (${card.name})`;
+            return {
+              id: String(c.id ?? card.id ?? card.name),
+              name: displayName,
+              isReversed: false,
+              position: c.position ?? picked[i]!.position,
+              keywords: Array.isArray(c.keywords) ? c.keywords.slice(0, 3).map(String) : [],
+              interpretation: String(c.interpretation ?? ""),
+            };
+          });
 
           const result: TarotResult = {
             date,
@@ -213,22 +245,30 @@ ${cardsDesc}
             caution: parsed.caution ? String(parsed.caution) : undefined,
             cards,
           };
+
           incrementRate(clientId);
           return NextResponse.json(result);
         }
       } catch (e) {
-        console.error(e);
+        console.error("tarot openai error:", e);
       }
     }
 
+    logDemoModeOnce();
     const fallback = buildFallback(date, spread, question, picked);
     incrementRate(clientId);
-    return NextResponse.json(fallback);
+    return NextResponse.json({ ...fallback, meta: { demo: true } });
   } catch (e) {
-    console.error(e);
-    return NextResponse.json(
-      { error: "타로 해석에 실패했습니다. 잠시 후 다시 시도해 주세요." },
-      { status: 500 }
-    );
+    console.error("tarot route error:", e);
+    logDemoModeOnce();
+    const date = new Date().toISOString().slice(0, 10);
+    const spread = (body.spread as TarotSpread) ?? "single";
+    const question = (body.question as string)?.trim() || undefined;
+    const profile = (body.profileSnapshot as { birth?: string; name?: string }) ?? { birth: "", name: "" };
+    const seed = buildSeed(date, profile, spread, question ?? "", 0);
+    const picked = pickCards(spread, seed);
+    const fallback = buildFallback(date, spread, question, picked);
+    incrementRate(clientId);
+    return NextResponse.json({ ...fallback, meta: { demo: true } });
   }
 }

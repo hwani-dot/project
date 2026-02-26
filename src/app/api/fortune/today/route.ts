@@ -1,10 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { hashString, seededPick } from "@/lib/seed";
+import { isDemoMode, logDemoModeOnce } from "@/lib/demo";
 import type { TodayFortuneResult } from "@/types/fortune";
 
 const RATE_LIMIT = 10;
 const rateMap = new Map<string, { count: number; resetAt: number }>();
+
+function hasOpenAIKey() {
+  const k = process.env.OPENAI_API_KEY;
+  return !!k && k.trim().length > 0;
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
+  ]);
+}
 
 function getClientId(req: NextRequest): string {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
@@ -42,13 +55,13 @@ function parseProfile(body: Record<string, unknown>): {
   const birth =
     (body.birth as string)?.match(/^\d{4}-\d{2}-\d{2}$/)?.[0] ??
     (body.birthYear != null && body.birthMonth != null && body.birthDay != null
-      ? `${String(body.birthYear).padStart(4, "0")}-${String(Number(body.birthMonth)).padStart(2, "0")}-${String(Number(body.birthDay)).padStart(2, "0")}`
+      ? `${String(body.birthYear).padStart(4, "0")}-${String(Number(body.birthMonth)).padStart(
+          2,
+          "0"
+        )}-${String(Number(body.birthDay)).padStart(2, "0")}`
       : "");
 
-  const name =
-    (body.name as string)?.trim() ||
-    (body.nickname as string)?.trim() ||
-    "방문자";
+  const name = (body.name as string)?.trim() || (body.nickname as string)?.trim() || "방문자";
 
   const interests = Array.isArray(body.interests)
     ? (body.interests as string[]).filter(Boolean)
@@ -62,6 +75,12 @@ function parseProfile(body: Record<string, unknown>): {
     calendarType: body.calendarType as string | undefined,
     birthTime: body.birthTime as string | undefined,
   };
+}
+
+function defaultBirth(): string {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 25);
+  return d.toISOString().slice(0, 10);
 }
 
 function buildFallback(profile: ReturnType<typeof parseProfile>): TodayFortuneResult {
@@ -122,21 +141,10 @@ function buildFallback(profile: ReturnType<typeof parseProfile>): TodayFortuneRe
   const keywordsPool = ["안정", "소통", "기회", "휴식", "성장", "균형", "배려", "인내"];
   const k1 = seededPick(keywordsPool, seed + "k1");
   const k2 = seededPick(keywordsPool.filter((x) => x !== k1), seed + "k2");
-  const k3 = seededPick(
-    keywordsPool.filter((x) => x !== k1 && x !== k2),
-    seed + "k3"
-  );
+  const k3 = seededPick(keywordsPool.filter((x) => x !== k1 && x !== k2), seed + "k3");
 
-  const cautions = [
-    "성급한 결정은 피하세요.",
-    "과한 약속은 삼가세요.",
-    "감정적인 반응은 나중에 후회할 수 있습니다.",
-  ];
-  const actions = [
-    "오늘 한 가지 좋은 일을 기록해 보세요.",
-    "가까운 사람에게 연락해 보세요.",
-    "30분 정도 산책을 권합니다.",
-  ];
+  const cautions = ["성급한 결정은 피하세요.", "과한 약속은 삼가세요.", "감정적인 반응은 나중에 후회할 수 있습니다."];
+  const actions = ["오늘 한 가지 좋은 일을 기록해 보세요.", "가까운 사람에게 연락해 보세요.", "30분 정도 산책을 권합니다."];
   const colors = ["파랑", "초록", "흰색", "베이지", "연보라"];
   const times = ["09:00~11:00", "14:00~16:00", "18:00~20:00"];
   const items = ["펜", "책", "물병", "손수건", "열쇠고리"];
@@ -171,10 +179,7 @@ function buildFallback(profile: ReturnType<typeof parseProfile>): TodayFortuneRe
 export async function POST(req: NextRequest) {
   const clientId = getClientId(req);
   if (!checkRateLimit(clientId)) {
-    return NextResponse.json(
-      { error: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." },
-      { status: 429 }
-    );
+    return NextResponse.json({ error: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." }, { status: 429 });
   }
 
   try {
@@ -185,15 +190,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "생년월일(birth)이 필요합니다." }, { status: 400 });
     }
 
+    // ✅ 1) 키 없으면 즉시 fallback (OpenAI 코드로 절대 내려가지 않기)
+    if (!hasOpenAIKey()) {
+      logDemoModeOnce();
+      const fallback = buildFallback(profile);
+      incrementRate(clientId);
+      return NextResponse.json({ ...fallback, meta: { demo: true, reason: "no_openai_key" } });
+    }
+
     const date = new Date().toISOString().slice(0, 10);
     const seed = `${date}-${profile.birth}-${profile.name}`;
 
-    if (process.env.OPENAI_API_KEY) {
+    if (!isDemoMode()) {
       try {
         const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-        const birthLine = profile.birthTime
-          ? `${profile.birth} ${profile.birthTime}`
-          : profile.birth;
+
+        const birthLine = profile.birthTime ? `${profile.birth} ${profile.birthTime}` : profile.birth;
+
         const prompt = `당신은 운세 전문가입니다. 아래 정보를 바탕으로 오늘(${date})의 개인화된 운세를 JSON으로 작성해 주세요.
 
 사용자: ${profile.name}
@@ -211,7 +224,7 @@ export async function POST(req: NextRequest) {
   "date": "${date}",
   "title": "오늘의 흐름",
   "headline": "운세의 총운은 ○○ 입니다 (예: 금상첨화/무난함/양호 등 1줄)",
-  "overview": "총운 본문. 네이버 운세처럼 자연스러운 문단 스타일로 5~10문장 작성. 오늘의 전체 흐름을 읽는 재미가 있게.",
+  "overview": "총운 본문. 자연스러운 문단 스타일로 5~10문장",
   "summary": ["1줄 요약", "2줄 요약", "3줄 요약"],
   "sections": {
     "love": "연애운 2~4문장",
@@ -231,11 +244,15 @@ export async function POST(req: NextRequest) {
   }
 }`;
 
-        const completion = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [{ role: "user", content: prompt }],
-          response_format: { type: "json_object" },
-        });
+        // ✅ 2) OpenAI 호출 타임아웃 (9초)
+        const completion = await withTimeout(
+          openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
+          }),
+          9000
+        );
 
         const content = completion.choices[0]?.message?.content;
         if (content) {
@@ -250,7 +267,9 @@ export async function POST(req: NextRequest) {
           ) {
             parsed.date = date;
             parsed.headline = String(parsed.headline ?? "오늘의 총운을 확인해 보세요.");
-            parsed.overview = String(parsed.overview ?? parsed.summary?.join(" ") ?? "오늘의 운세를 확인해 보세요.");
+            parsed.overview = String(
+              parsed.overview ?? parsed.summary?.join(" ") ?? "오늘의 운세를 확인해 보세요."
+            );
             parsed.lucky = {
               color: String(parsed.lucky?.color ?? "파랑"),
               number: Number(parsed.lucky?.number) || 7,
@@ -261,26 +280,27 @@ export async function POST(req: NextRequest) {
               ? parsed.keywords.slice(0, 3).map(String)
               : ["안정", "소통", "기회"];
             parsed.caution = String(parsed.caution ?? "성급한 결정은 피하세요.");
-            parsed.recommendedAction = String(
-              parsed.recommendedAction ?? "오늘 한 가지 좋은 일을 기록해 보세요."
-            );
+            parsed.recommendedAction = String(parsed.recommendedAction ?? "오늘 한 가지 좋은 일을 기록해 보세요.");
             incrementRate(clientId);
             return NextResponse.json(parsed);
           }
         }
       } catch (e) {
-        console.error(e);
+        console.error("today openai error:", e);
       }
     }
 
+    // ✅ demo / fallback
+    logDemoModeOnce();
     const fallback = buildFallback(profile);
     incrementRate(clientId);
-    return NextResponse.json(fallback);
+    return NextResponse.json({ ...fallback, meta: { demo: true } });
   } catch (e) {
-    console.error(e);
-    return NextResponse.json(
-      { error: "운세 생성에 실패했습니다. 잠시 후 다시 시도해 주세요." },
-      { status: 500 }
-    );
+    console.error("today route error:", e);
+    logDemoModeOnce();
+    const fallbackProfile = { birth: "2000-01-01", name: "방문자", interests: [] as string[] };
+    const fallback = buildFallback(fallbackProfile);
+    incrementRate(clientId);
+    return NextResponse.json({ ...fallback, meta: { demo: true } });
   }
 }
